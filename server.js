@@ -33,7 +33,7 @@ function getFavicon(url, callback) {
         callback(favicon);
       });
     } else {
-      console.log("file not found: " + url);
+      console.log("Favicon not found: " + url);
       callback(); // undefined
     }
   }).on('error', function (err) {
@@ -45,7 +45,7 @@ function saveFavicon(filename, favicon) {
   fs.writeFile(__dirname + '/favicons/' + filename, favicon, function (err) {
     if (err) {
       console.log('Error saving favicon: ' + filename);
-      console.log(err);
+      console.log(err.message);
     }
   });
 }
@@ -107,7 +107,7 @@ http.createServer(function (request, response) {
   fs.stat(__dirname + '/favicons/' + host + '.ico', function (err, stats) {
     // If there's an error, we don't have it.
     if (err) {
-      console.log('http.get: ' + root + '/favicon.ico');
+      // console.log('http.get: ' + root + '/favicon.ico');
       // Try fetching the icon from the root of the domain.
       // TODO: Consider parsing HTML first (See www.msn.com use case) like browsers.
       getFavicon(root + '/favicon.ico', function (favicon) {
@@ -118,7 +118,6 @@ http.createServer(function (request, response) {
           saveFavicon(host + '.ico', favicon);
         // If not, try parsing the HTML source for a favicon.
         } else {
-          console.log('parsing html');
           getHTML(root, function (html) {
             // If we have HTML, parse out the favicon link.
             if (html) {
@@ -159,6 +158,7 @@ http.createServer(function (request, response) {
           response.end(favicon);
         } else {
           console.log('Error reading ' + host + '.ico');
+          console.log(err.message);
           response.end();
         }
       });

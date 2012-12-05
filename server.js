@@ -1,4 +1,21 @@
+/*
+ * Node.js Favicon Service
+ *
+ * APPROACH
+ * Taking advantage of Node's asynchronous nature, we fire off two
+ * requests: one for the root favicon and one for the HTML where we parse
+ * for the preferred location of the favicon.  If we don't find the favicon
+ * URL in the source, we use the one at the root of the domain.
+ *
+ * USAGE
+ * <server>/<domain or url>
+ *
+ * EXAMPLE
+ * http://localhost:8080/www.aol.com
+ *
+ */
 var http = require('http'),
+  https = require('https'),
   url = require('url'),
   fs = require('fs'),
 
@@ -20,11 +37,19 @@ fs.readFile(__dirname + '/default.ico', function (err, favicon) {
 
 // Downloads a favicon from a given URL
 function getFavicon(url, callback) {
-  http.get(url, function (res) {
+  var protocol;
+  if (/https:\/\//.test(url)) {
+    protocol = https;
+  } else {
+    protocol = http;
+  }
+  protocol.get(url, function (res) {
+
     var favicon,
       chunks = [],
       length = 0;
-    if (res.statusCode !== 404) {
+
+    if (res.statusCode === 200) {
       res.on('data', function (chunk) {
         chunks.push(chunk);
         length += chunk.length;
@@ -32,8 +57,12 @@ function getFavicon(url, callback) {
         favicon = Buffer.concat(chunks, length);
         callback(favicon);
       });
+    } else if (res.statusCode === 301 || res.statusCode === 302) {
+      // Fetch the favicon at the given location.
+      // console.log("Redirecting to: " + res.headers['location']);
+      getFavicon(res.headers['location'], callback);
     } else {
-      console.log("Favicon not found: " + url);
+      // console.log("Favicon not found: " + url);
       callback(); // undefined
     }
   }).on('error', function (err) {
@@ -51,18 +80,29 @@ function saveFavicon(filename, favicon) {
 }
 
 function getHTML(url, callback) {
-  http.get(url, function (res) {
+  var protocol;
+  if (/https:\/\//.test(url)) {
+    protocol = https;
+  } else {
+    protocol = http;
+  }
+  protocol.get(url, function (res) {
+
     var html,
       chunks = [],
       length = 0;
+
     res.setEncoding('utf-8');
-    if (res.statusCode !== 404) {
+    if (res.statusCode === 200) {
       res.on('data', function (chunk) {
         chunks.push(chunk);
       }).on('end', function () {
         html = chunks.join('');
         callback(html);
       });
+    } else if (res.statusCode === 301 || res.statusCode === 302) {
+      // console.log("Redirecting to: " + res.headers['location']);
+      getHTML(res.headers['location'], callback);
     } else {
       callback(); // undefined
     }
@@ -72,8 +112,8 @@ function getHTML(url, callback) {
 }
 
 function parseFaviconURL(html, root) {
-  var link_re = /<link (.*)>/gi,
-    rel_re  = /rel=["'][^"]*icon[^"']*["']/i,
+  var link_re = /<link ([^>]*)>/gi,
+    rel_re  = /rel=["'][^"']*icon[^"']*["']/i,
     href_re = /href=["']([^"']*)["']/i,
     match, ico_match, faviconURL;
 
@@ -94,7 +134,35 @@ http.createServer(function (request, response) {
 
   // Parse the request URL to identify the root.
   var root = request.url.substr(1),
-    host;
+    host,
+
+    rootFavicon,
+    htmlFavicon,
+
+    // These variables help us know when both
+    // requests have returned and we can complete
+    // the request.
+    promiseReturned = 0,
+    promiseExpected = 2,
+    done = function () {
+      promiseReturned += 1;
+      var favicon;
+      if (promiseReturned === promiseExpected) {
+        // If we have an html favicon, let's use that.
+        if (htmlFavicon) {
+          favicon = htmlFavicon;
+        // If not, use the root favicon.
+        } else if (rootFavicon) {
+          favicon = rootFavicon;
+        // Otherwise, fall back to the default.
+        } else {
+          favicon = defaultFavicon;
+        }
+        response.writeHead(200, {'Content-Type': 'image/x-icon'});
+        response.end(favicon);
+        saveFavicon(host + '.ico', favicon);
+      }
+    };
 
   if (!/http[s]*:\/\//.test(root)) {
     root = 'http://' + root;
@@ -107,48 +175,35 @@ http.createServer(function (request, response) {
   fs.stat(__dirname + '/favicons/' + host + '.ico', function (err, stats) {
     // If there's an error, we don't have it.
     if (err) {
-      // console.log('http.get: ' + root + '/favicon.ico');
       // Try fetching the icon from the root of the domain.
-      // TODO: Consider parsing HTML first (See www.msn.com use case) like browsers.
       getFavicon(root + '/favicon.ico', function (favicon) {
         // If we got one, save it to disk and return it.
         if (favicon) {
-          response.writeHead(200, {'Content-Type': 'image/x-icon'});
-          response.end(favicon);
-          saveFavicon(host + '.ico', favicon);
-        // If not, try parsing the HTML source for a favicon.
+          rootFavicon = favicon;
+        }
+        console.log("Root favicon found for " + root);
+        done();
+      });
+
+      // Try fetching the HTML and parsing it for the favicon.
+      getHTML(root, function (html) {
+        // If we have HTML, parse out the favicon link.
+        if (html) {
+          var faviconURL = parseFaviconURL(html, root);
+          // If we have a favicon URL, try to get it.
+          if (faviconURL) {
+            console.log('Found favicon in HTML: ' + faviconURL);
+            getFavicon(faviconURL, function (favicon) {
+              htmlFavicon = favicon;
+              done();
+            });
+          } else {
+            console.log('Favicon not downloaded: ' + root);
+            done();
+          }
         } else {
-          getHTML(root, function (html) {
-            // If we have HTML, parse out the favicon link.
-            if (html) {
-              var faviconURL = parseFaviconURL(html, root);
-              // If we have a favicon URL, try to get it.
-              if (faviconURL) {
-                console.log('Found favicon in HTML: ' + faviconURL);
-                getFavicon(faviconURL, function (favicon) {
-                  // If we do not have a favicon by now, use the default favicon.
-                  if (!favicon) {
-                    favicon = defaultFavicon;
-                  }
-                  // Save it to disk and return it.
-                  response.writeHead(200, {'Content-Type': 'image/x-icon'});
-                  response.end(favicon);
-                  saveFavicon(host + '.ico', favicon);
-                });
-              // No favicon could be found; use default favicon.
-              } else {
-                console.log("Could not find favicon in HTML.");
-                response.writeHead(200, {'Content-Type': 'image/x-icon'});
-                response.end(defaultFavicon);
-                saveFavicon(host + '.ico', defaultFavicon);
-              }
-            } else {
-              console.log("HTML failed to load.");
-              response.writeHead(200, {'Content-Type': 'image/x-icon'});
-              response.end(defaultFavicon);
-              saveFavicon(host + '.ico', defaultFavicon);
-            }
-          });
+          console.log('No HTML returned: ' + root);
+          done();
         }
       });
     } else {

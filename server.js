@@ -130,6 +130,7 @@ function parseFaviconURL(html, root) {
 }
 
 // Initialize HTTP server.
+http.globalAgent.maxSockets = Number.MAX_VALUE;
 http.createServer(function (request, response) {
 
   // Parse the request URL to identify the root.

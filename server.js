@@ -163,6 +163,11 @@ http.createServer(function (request, response) {
         } else {
           favicon = defaultFavicon;
         }
+
+        if(favicon.length <= 0){
+          favicon = defaultFavicon;
+        }
+
         response.writeHead(200, {'Content-Type': 'image/x-icon'});
         response.end(favicon);
         saveFavicon(host + '.ico', favicon);
@@ -225,6 +230,10 @@ http.createServer(function (request, response) {
       // console.log(host + '.ico file stats: ', stats);
       fs.readFile(cacheDir + host + '.ico', function (err, favicon) {
         if (!err) {
+          if(favicon.length <= 0){
+            favicon = defaultFavicon;
+          }
+          
           response.writeHead(200, {'Content-Type': 'image/x-icon'});
           response.end(favicon);
         } else {

@@ -178,7 +178,7 @@ http.createServer(function (request, response) {
   root = root.protocol + '//' + host;
 
   // See if we have the favicon in our cache.
-  fs.stat(__dirname + '/favicons/' + host + '.ico', function (err, stats) {
+  fs.stat(cacheDir + host + '.ico', function (err, stats) {
 
     // If we have stats on the file, see if we need to refresh if
     // greater than our time limit.

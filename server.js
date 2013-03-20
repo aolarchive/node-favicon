@@ -19,12 +19,16 @@ var http = require('http'),
   url = require('url'),
   fs = require('fs'),
 
-  defaultFavicon;
+  defaultFavicon,
+  cacheDir = __dirname + '/favicons/',
+  port = 8080;
 
 // Create the favicons directory.
-if (!fs.exists(__dirname + '/favicons/')) {
-  fs.mkdir(__dirname + '/favicons/');
-}
+fs.exists(cacheDir, function(exists) {
+    if(!exists){
+      fs.mkdir(cacheDir);
+    }
+});
 
 // Keep default favicon in memory.
 fs.readFile(__dirname + '/default.ico', function (err, favicon) {
@@ -71,7 +75,7 @@ function getFavicon(url, callback) {
 }
 
 function saveFavicon(filename, favicon) {
-  fs.writeFile(__dirname + '/favicons/' + filename, favicon, function (err) {
+  fs.writeFile(cacheDir + filename, favicon, function (err) {
     if (err) {
       console.log('Error saving favicon: ' + filename);
       console.log(err.message);
@@ -219,7 +223,7 @@ http.createServer(function (request, response) {
       });
     } else {
       // console.log(host + '.ico file stats: ', stats);
-      fs.readFile(__dirname + '/favicons/' + host + '.ico', function (err, favicon) {
+      fs.readFile(cacheDir + host + '.ico', function (err, favicon) {
         if (!err) {
           response.writeHead(200, {'Content-Type': 'image/x-icon'});
           response.end(favicon);
@@ -232,6 +236,6 @@ http.createServer(function (request, response) {
     }
   });
 
-}).listen(8080, 'localhost');
+}).listen(port);
 
-console.log('Server running at http://localhost:8080/.');
+console.log('Server running at port ', port);

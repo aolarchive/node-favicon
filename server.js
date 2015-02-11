@@ -19,12 +19,16 @@ var http = require('http'),
   url = require('url'),
   fs = require('fs'),
 
-  defaultFavicon;
+  defaultFavicon,
+  cacheDir = __dirname + '/favicons/',
+  port = 8080;
 
 // Create the favicons directory.
-if (!fs.exists(__dirname + '/favicons/')) {
-  fs.mkdir(__dirname + '/favicons/');
-}
+fs.exists(cacheDir, function(exists) {
+    if(!exists){
+      fs.mkdir(cacheDir);
+    }
+});
 
 // Keep default favicon in memory.
 fs.readFile(__dirname + '/default.ico', function (err, favicon) {
@@ -71,7 +75,7 @@ function getFavicon(url, callback) {
 }
 
 function saveFavicon(filename, favicon) {
-  fs.writeFile(__dirname + '/favicons/' + filename, favicon, function (err) {
+  fs.writeFile(cacheDir + filename, favicon, function (err) {
     if (err) {
       console.log('Error saving favicon: ' + filename);
       console.log(err.message);
@@ -159,6 +163,11 @@ http.createServer(function (request, response) {
         } else {
           favicon = defaultFavicon;
         }
+
+        if(favicon.length <= 0){
+          favicon = defaultFavicon;
+        }
+
         response.writeHead(200, {'Content-Type': 'image/x-icon'});
         response.end(favicon);
         saveFavicon(host + '.ico', favicon);
@@ -174,7 +183,7 @@ http.createServer(function (request, response) {
   root = root.protocol + '//' + host;
 
   // See if we have the favicon in our cache.
-  fs.stat(__dirname + '/favicons/' + host + '.ico', function (err, stats) {
+  fs.stat(cacheDir + host + '.ico', function (err, stats) {
 
     // If we have stats on the file, see if we need to refresh if
     // greater than our time limit.
@@ -219,8 +228,12 @@ http.createServer(function (request, response) {
       });
     } else {
       // console.log(host + '.ico file stats: ', stats);
-      fs.readFile(__dirname + '/favicons/' + host + '.ico', function (err, favicon) {
+      fs.readFile(cacheDir + host + '.ico', function (err, favicon) {
         if (!err) {
+          if(favicon.length <= 0){
+            favicon = defaultFavicon;
+          }
+          
           response.writeHead(200, {'Content-Type': 'image/x-icon'});
           response.end(favicon);
         } else {
@@ -232,6 +245,6 @@ http.createServer(function (request, response) {
     }
   });
 
-}).listen(8080, 'localhost');
+}).listen(port);
 
-console.log('Server running at http://localhost:8080/.');
+console.log('Server running at port ', port);
